@@ -17,7 +17,7 @@ PASSWORD = os.getenv('PASSWORD')
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 
-logging.info(os.getenv('LOGIN'))
+logging.info(os.getenv('PYTHON_VERSION'))
 
 # Глобальная переменная для кеширования error_frame
 error_frame = None
