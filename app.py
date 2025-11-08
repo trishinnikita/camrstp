@@ -8,40 +8,39 @@ from dotenv import load_dotenv
 import time
 import logging
 
-load_dotenv()
-
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', os.urandom(24).hex())
+app.secret_key = os.getenv('SECRET_KEY')
 
 LOGIN = os.getenv('LOGIN')
 PASSWORD = os.getenv('PASSWORD')
 
-# Настройка логирования (INFO для Docker)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+
+logging.info(os.getenv('LOGIN'))
 
 # Глобальная переменная для кеширования error_frame
 error_frame = None
-ERROR_IMAGE_PATH = os.path.join(app.static_folder or 'static', 'img', 'unavailable.jpg')
+ERROR_IMAGE_PATH = os.path.join(app.static_folder, 'img', 'unavailable.jpg')
 
 # Функция для загрузки error_frame (вызывается один раз)
 def load_error_frame():
     global error_frame
     if error_frame is None:
-        try:
-            img_path = ERROR_IMAGE_PATH
-            if os.path.exists(img_path):
-                error_frame = cv2.imread(img_path)
+        # Пытаемся загрузить статическую картинку
+        img_path = ERROR_IMAGE_PATH
+        if os.path.exists(img_path):
+            error_frame = cv2.imread(img_path)
             if error_frame is None:
-                # Fallback: создаем текстовый фрейм
+                # Fallback: создаем текстовый фрейм, если файл поврежден
                 import numpy as np
                 error_frame = np.zeros((480, 640, 3), dtype=np.uint8)
                 cv2.putText(error_frame, 'Камера недоступна', (150, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        except Exception as e:
-            logging.error(f"Error loading error_frame: {e}")
-            # Ultimate fallback
+        else:
+            # Fallback: создаем текстовый фрейм, если файл не найден
             import numpy as np
             error_frame = np.zeros((480, 640, 3), dtype=np.uint8)
-            cv2.putText(error_frame, 'Ошибка', (200, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+            cv2.putText(error_frame, 'Камера недоступна', (150, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
     return error_frame
 
 # Глобальные словари для потоков и очередей
@@ -53,107 +52,68 @@ def start_capture_thread(stream_id, rtsp_url):
     load_error_frame()
     
     def capture_loop():
-        try:
-            # Force UDP transport and increase timeout
-            os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;udp|timeout;60000000|stimeout;60000000'
-            
-            logging.info(f"Attempting to open RTSP for {stream_id}: {rtsp_url}")
-            cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)
-            
-            if not cap.isOpened():
-                logging.error(f"Failed to open RTSP for {stream_id}: {rtsp_url}")
-                # Fallback loop: put error_frame
-                while True:
-                    try:
-                        frame_queues[stream_id].put(error_frame, block=False)
-                        time.sleep(1/30)
-                    except (queue.Full, KeyError):
-                        if stream_id in frame_queues:
-                            frame_queues[stream_id].get()
-                        time.sleep(1/30)
-                return
-            
-            logging.info(f"RTSP opened successfully for {stream_id}")
-            
+        # Force UDP transport and increase timeout (60 seconds in microseconds)
+        os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;udp|timeout;60000000'
+        
+        cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)  # Force FFMPEG backend
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)  # Буфер 3 кадра для снижения задержки
+        
+        if not cap.isOpened():
+            logging.error(f"Failed to open RTSP for {stream_id}: {rtsp_url}")
+            # Если не открылась, кладём error_frame в очередь
             while True:
-                success, frame = cap.read()
-                if not success:
-                    frame = error_frame
                 try:
-                    frame_queues[stream_id].put(frame, block=False)
+                    frame_queues[stream_id].put(error_frame, block=False)
                     time.sleep(1/30)  # ~30 FPS
-                except (queue.Full, KeyError):
-                    if stream_id in frame_queues:
-                        frame_queues[stream_id].get()
-                    time.sleep(1/30)
-        except Exception as e:
-            logging.error(f"Exception in capture_loop for {stream_id}: {e}")
-        finally:
-            if 'cap' in locals():
-                cap.release()
+                except queue.Full:
+                    frame_queues[stream_id].get()  # Очищаем очередь, если полна
+            return
+        
+        logging.info(f"RTSP opened successfully for {stream_id}: {rtsp_url}")
+        
+        while True:
+            success, frame = cap.read()
+            if not success:
+                frame = error_frame
+            try:
+                frame_queues[stream_id].put(frame, block=False)
+                time.sleep(1/30)  # ~30 FPS
+            except queue.Full:
+                frame_queues[stream_id].get()  # Очищаем очередь, если полна
+        cap.release()
     
-    # Создаём очередь если нет
-    if stream_id not in frame_queues:
-        frame_queues[stream_id] = queue.Queue(maxsize=10)
+    # Создаём очередь (maxsize=10 для буфера)
+    frame_queues[stream_id] = queue.Queue(maxsize=10)
     # Стартуем поток
     thread = threading.Thread(target=capture_loop, daemon=True)
     thread.start()
     capture_threads[stream_id] = thread
-    logging.info(f"Capture thread started for {stream_id}")
 
 # Функция для генерации MJPEG-стрима из очереди
 def gen_frames(stream_id):
-    load_error_frame()
     while True:
         try:
-            # Lazy init queue if missing
-            if stream_id not in frame_queues:
-                frame_queues[stream_id] = queue.Queue(maxsize=10)
-                start_capture_thread(stream_id, RTSP_URLS[stream_id])  # Start on demand
-            
-            frame = frame_queues[stream_id].get(timeout=1)
-        except (queue.Empty, KeyError) as e:
-            logging.warning(f"Queue issue for {stream_id}: {e}")
+            frame = frame_queues[stream_id].get(timeout=1)  # Ждём кадр max 1 сек
+        except queue.Empty:
             frame = error_frame
-        except Exception as e:
-            logging.error(f"Error in gen_frames for {stream_id}: {e}")
-            frame = error_frame
-        
-        try:
-            ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            if not ret:
-                logging.error(f"Failed to encode frame for {stream_id}")
-                frame = error_frame
-                continue
-            frame_bytes = buffer.tobytes()
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        except Exception as e:
-            logging.error(f"Encode error for {stream_id}: {e}")
-            # Yield error frame as fallback
-            ret, buffer = cv2.imencode('.jpg', error_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            frame_bytes = buffer.tobytes()
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        frame_bytes = buffer.tobytes()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
-# RTSP URL'ы из .env
+# RTSP URL'ы с правильным экранированием пароля (%40%40 для @@)
 RTSP_URLS = {
     'stream1': os.getenv('RTSP_STREAM1'),
     'stream2': os.getenv('RTSP_STREAM2'),
     'stream3': os.getenv('RTSP_STREAM3')
 }
 
-# Инициализация стримов
+# Инициализация стримов (для Gunicorn - вызывать в worker)
 def init_streams():
     for stream_id, rtsp_url in RTSP_URLS.items():
-        if rtsp_url:  # Skip if empty
+        if stream_id not in frame_queues:
             start_capture_thread(stream_id, rtsp_url)
     logging.info("Все RTSP-потоки запущены параллельно.")
-
-@app.before_first_request
-def before_first_request():
-    init_streams()  # Init in worker for Gunicorn/Docker
 
 @app.route('/')
 def index():
@@ -162,7 +122,7 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form.get('email')
+        username = request.form.get('email')  # Соответствует name="email" в login.html
         password = request.form.get('password')
         if username == LOGIN and password == PASSWORD:
             session['logged_in'] = True
@@ -182,34 +142,25 @@ def logout():
     session.pop('logged_in', None)
     return redirect(url_for('login'))
 
-# Роут для стриминга видео
+# Роут для стриминга видео (единый роут с переменной <stream_id>)
 @app.route('/<stream_id>.mjpg')
 def video_stream(stream_id):
     if not session.get('logged_in'):
-        abort(401)
+        abort(401)  # Неавторизованные получают 401
     if stream_id not in RTSP_URLS:
-        logging.error(f"Invalid stream_id: {stream_id}")
         abort(404)
-    
-    try:
-        return Response(gen_frames(stream_id), mimetype='multipart/x-mixed-replace; boundary=frame')
-    except Exception as e:
-        logging.error(f"Error in video_stream for {stream_id}: {e}")
-        # Fallback: Single error image response
-        load_error_frame()
-        ret, buffer = cv2.imencode('.jpg', error_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-        return Response(buffer.tobytes(), mimetype='image/jpeg')
+    return Response(gen_frames(stream_id), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 # Обработка 404
 @app.errorhandler(404)
 def not_found(error):
     return render_template('404.html'), 404
 
-# Для Gunicorn post_fork (если нужно)
+# Для Gunicorn: Инициализация в worker после форка
 def post_fork(server, worker):
     init_streams()
 
 # Для локального запуска
 if __name__ == '__main__':
     init_streams()
-    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)
+    app.run(debug=True, host='0.0.0.0', port=5000, threaded=True)  # threaded=True для Flask
