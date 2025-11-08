@@ -1,0 +1,56 @@
+# ========================
+# Основные исключения
+# ========================
+
+# Локальные конфигурационные файлы
+.env
+.env.local
+.env.*.local
+
+# Папки кэша Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Виртуальные окружения
+venv/
+ENV/
+env/
+.venv/
+.env/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# IDE / Редакторы
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Логи и временные файлы
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tmp
+*.temp
+
+# Сборки и артефакты
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Тесты и покрытие
+.coverage
+.coverage.*
+.cache/
+htmlcov/
+.tox/
+.pytest_cache/
+
+# Локальные настройки Git
+.gitconfig
