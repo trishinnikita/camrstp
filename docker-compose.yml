@@ -7,10 +7,3 @@ services:
     restart: unless-stopped
     ports:
       - "5000:5000"
-    environment:
-      - SECRET_KEY
-      - LOGIN:test
-      - PASSWORD
-      - RTSP_STREAM1
-      - RTSP_STREAM2
-      - RTSP_STREAM3
