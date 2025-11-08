@@ -16,4 +16,4 @@ COPY . .
 
 EXPOSE 5000
 
-CMD ["gunicorn", "--worker-class", "gevent", "--workers", "1", "--bind", "0.0.0.0:5000", "--preload", "app:app"]
+CMD ["gunicorn", "--worker-class", "gthread", "--workers", "3", "--bind", "0.0.0.0:5000", "--threads", "3", "app:app"]
