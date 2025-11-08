@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html class="h-full bg-gray-900">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='style/modalWindow.css') }}" />
+    <link rel="icon" href="{{ url_for('static', filename='img/favicon.ico') }}" type="image/x-icon">
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <title>Трансляция камер</title>
+</head>
+
+<body class="h-full">
+    <div class="bg-gray-900 py-24 sm:py-32">
+        <div class="mx-auto max-w-7xl px-3">
+            <h2 class="text-center text-base/7 font-semibold text-indigo-400">
+                Онлайн трансляция
+            </h2>
+            <p class="mx-auto mt-2 max-w-lg text-center text-4xl font-semibold tracking-tight text-balance text-white sm:text-5xl">
+                Кантри Парк Парковки
+            </p>
+            <div class="mt-10 grid gap-4 sm:mt-16 lg:grid-cols-3 lg:grid-rows-1">
+                <div class="relative">
+                    <div class="absolute inset-px rounded-lg bg-gray-800"></div>
+                    <div class="relative px-4 py-5 flex h-full flex-col overflow-hidden rounded-[calc(var(--radius-lg)+1px)]">
+                        <div class="pb-5">
+                            <p class="mt-2 text-lg font-medium tracking-tight text-white max-lg:text-center">
+                                Въезд на парковку
+                            </p>
+                        </div>
+                        <div class="relative w-full grow aspect-[16/9] max-lg:mx-auto max-lg:max-w-sm cursor-pointer"
+                            onclick="openModal('/stream1.mjpg')">
+                            <div class="absolute inset-0 overflow-hidden rounded-lg border border-gray-700 bg-gray-900 outline outline-white/20">
+                                <img src="/stream1.mjpg" alt="Камера 1" class="w-full h-full object-contain" loading="eager">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pointer-events-none absolute inset-px rounded-lg shadow-sm outline outline-white/15"></div>
+                </div>
+                <div class="relative">
+                    <div class="absolute inset-px rounded-lg bg-gray-800"></div>
+                    <div class="relative flex px-4 py-5 h-full flex-col overflow-hidden rounded-[calc(var(--radius-lg)+1px)]">
+                        <div class="pb-5">
+                            <p class="mt-2 text-lg font-medium tracking-tight text-white max-lg:text-center">
+                                Панфилова 11
+                            </p>
+                        </div>
+                        <div class="relative w-full grow aspect-[16/9] max-lg:mx-auto max-lg:max-w-sm cursor-pointer"
+                            onclick="openModal('/stream2.mjpg')">
+                            <div class="absolute inset-0 overflow-hidden rounded-lg border border-gray-700 bg-gray-900 outline outline-white/20">
+                                <img src="/stream2.mjpg" alt="Камера 2" class="w-full h-full object-contain" loading="eager">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pointer-events-none absolute inset-px rounded-lg shadow-sm outline outline-white/15"></div>
+                </div>
+                <div class="relative">
+                    <div class="absolute inset-px rounded-lg bg-gray-800"></div>
+                    <div class="relative flex px-4 py-5 h-full flex-col overflow-hidden rounded-[calc(var(--radius-lg)+1px)]">
+                        <div class="pb-5">
+                            <p class="mt-2 text-lg font-medium tracking-tight text-white max-lg:text-center">
+                                Выезд с парковки
+                            </p>
+                        </div>
+                        <div class="relative w-full grow aspect-[16/9] max-lg:mx-auto max-lg:max-w-sm cursor-pointer"
+                            onclick="openModal('/stream3.mjpg')">
+                            <div class="absolute inset-0 overflow-hidden rounded-lg border border-gray-700 bg-gray-900 outline outline-white/20">
+                                <img src="/stream3.mjpg" alt="Камера 3" class="w-full h-full object-contain" loading="eager">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pointer-events-none absolute inset-px rounded-lg shadow-sm outline outline-white/15"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно -->
+    <div id="modal" class="flex" onclick="closeModal()">
+        <span id="close" onclick="closeModal()">&times;</span>
+        <img id="modal-content" src="" alt="Видео в модале">
+    </div>
+
+    <script src="{{ url_for('static', filename='js/modalWindow.js') }}"></script>
+</body>
+
+</html>
